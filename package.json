@@ -1,0 +1,11 @@
+{
+  "name": "youtube-slack-daily-report",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Daily YouTube Analytics report sent to Slack via GitHub Actions",
+  "type": "module",
+  "scripts": { "report": "node src/report.js" },
+  "dependencies": {
+    "googleapis": "^144.0.0"
+  }
+}
