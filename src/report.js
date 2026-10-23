@@ -47,12 +47,12 @@ const message = {
   blocks: [
     { type: "header", text: { type: "plain_text", text: `📊 YouTube daily report · ${reportDate}`, emoji: true } },
     { type: "section", fields: [
-      { type: "mrkdwn", text: `*Views*\\n${n(values.views)}` },
-      { type: "mrkdwn", text: `*Watch time*\\n${watchTime}` },
-      { type: "mrkdwn", text: `*Subscribers gained*\\n+${n(values.subscribersGained)}` },
-      { type: "mrkdwn", text: `*Subscribers lost*\\n-${n(values.subscribersLost)}` },
-      { type: "mrkdwn", text: `*Net subscribers*\\n${netSubs >= 0 ? "+" : ""}${n(netSubs)}` },
-      { type: "mrkdwn", text: `*Likes · Comments · Shares*\\n${n(values.likes)} · ${n(values.comments)} · ${n(values.shares)}` }
+      { type: "mrkdwn", text: `*Views*\n${n(values.views)}` },
+      { type: "mrkdwn", text: `*Watch time*\n${watchTime}` },
+      { type: "mrkdwn", text: `*Subscribers gained*\n+${n(values.subscribersGained)}` },
+      { type: "mrkdwn", text: `*Subscribers lost*\n-${n(values.subscribersLost)}` },
+      { type: "mrkdwn", text: `*Net subscribers*\n${netSubs >= 0 ? "+" : ""}${n(netSubs)}` },
+      { type: "mrkdwn", text: `*Likes · Comments · Shares*\n${n(values.likes)} · ${n(values.comments)} · ${n(values.shares)}` }
     ]},
     { type: "context", elements: [
       { type: "mrkdwn", text: "Source: YouTube Analytics API · Daily data can be delayed or revised by YouTube." }
