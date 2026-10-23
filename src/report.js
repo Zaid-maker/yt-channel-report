@@ -20,50 +20,40 @@ oauth2.setCredentials({ refresh_token: process.env.YOUTUBE_REFRESH_TOKEN });
 const youtubeAnalytics = google.youtubeAnalytics({ version: "v2", auth: oauth2 });
 const channelId = process.env.YOUTUBE_CHANNEL_ID;
 
-// Analytics reports are finalized with a delay. Report the previous complete
-// calendar day in UTC; for many channels this is the closest reliable daily report.
-const reportDate = new Date(Date.now() - 24 * 60 * 60 * 1000)
+// Analytics data can arrive late. Query the previous seven complete UTC dates
+// by day, then report the most recent day for which the API returned a row.
+const endDate = new Date(Date.now() - 24 * 60 * 60 * 1000)
   .toISOString().slice(0, 10);
+const rangeStart = new Date(`${endDate}T00:00:00Z`);
+rangeStart.setUTCDate(rangeStart.getUTCDate() - 6);
+const startDate = rangeStart.toISOString().slice(0, 10);
 
 const response = await youtubeAnalytics.reports.query({
   ids: `channel==${channelId}`,
-  startDate: reportDate,
-  endDate: reportDate,
+  startDate,
+  endDate,
+  dimensions: "day",
   metrics: "views,estimatedMinutesWatched,subscribersGained,subscribersLost,likes,comments,shares",
 });
 
-const row = response.data.rows?.[0];
-if (!row) {
-  console.error(`YouTube Analytics returned no rows for channel ${channelId} on ${reportDate}.`);
-  console.error(`Returned column headers: ${(response.data.columnHeaders ?? []).map((header) => header.name).join(", ") || "(none)"}`);
+const headers = response.data.columnHeaders ?? [];
+const dayIndex = headers.findIndex((header) => header.name === "day");
+const rows = response.data.rows ?? [];
+const row = dayIndex < 0 ? null : [...rows].sort((a, b) => String(b[dayIndex]).localeCompare(String(a[dayIndex])))[0];
 
-  // Diagnostic only: check whether this channel has any reportable data in the
-  // preceding seven days, without changing the daily report or sending zeros.
-  const rangeEnd = new Date(`${reportDate}T00:00:00Z`);
-  const rangeStart = new Date(rangeEnd);
-  rangeStart.setUTCDate(rangeStart.getUTCDate() - 6);
-  const rangeStartDate = rangeStart.toISOString().slice(0, 10);
-  const rangeResponse = await youtubeAnalytics.reports.query({
-    ids: `channel==${channelId}`,
-    startDate: rangeStartDate,
-    endDate: reportDate,
-    metrics: "views,estimatedMinutesWatched,subscribersGained,subscribersLost,likes,comments,shares",
-  });
-  const rangeRow = rangeResponse.data.rows?.[0];
-  if (rangeRow) {
-    const rangeValues = Object.fromEntries(
-      (rangeResponse.data.columnHeaders ?? []).map((header, i) => [header.name, rangeRow[i] ?? 0])
-    );
-    console.error(`Seven-day diagnostic (${rangeStartDate} to ${reportDate}) returned data: views=${rangeValues.views}, watchMinutes=${rangeValues.estimatedMinutesWatched}, subscribersGained=${rangeValues.subscribersGained}, subscribersLost=${rangeValues.subscribersLost}.`);
-  } else {
-    console.error(`Seven-day diagnostic (${rangeStartDate} to ${reportDate}) also returned no rows. This points to a channel-ID/token mismatch or no reportable data for the range.`);
-    console.error(`Diagnostic column headers: ${(rangeResponse.data.columnHeaders ?? []).map((header) => header.name).join(", ") || "(none)"}`);
-  }
-  throw new Error("No daily YouTube Analytics row returned; refusing to send a misleading all-zero report.");
+if (!row) {
+  console.error(`YouTube Analytics returned no daily rows for channel ${channelId} between ${startDate} and ${endDate}.`);
+  console.error(`Returned column headers: ${headers.map((header) => header.name).join(", ") || "(none)"}`);
+  throw new Error("No daily YouTube Analytics rows returned for the seven-day window; refusing to send a misleading all-zero report.");
 }
-console.log(`YouTube Analytics returned ${response.data.rows.length} row(s) for ${reportDate}.`);
+
+const reportDate = String(row[dayIndex]);
+console.log(`YouTube Analytics returned ${rows.length} daily row(s) from ${startDate} to ${endDate}; reporting the latest available day: ${reportDate}.`);
 const values = Object.fromEntries(
-  (response.data.columnHeaders ?? []).map((header, i) => [header.name, row[i] ?? 0])
+  headers.filter((header) => header.name !== "day").map((header, i) => {
+    const originalIndex = headers.findIndex((candidate) => candidate.name === header.name);
+    return [header.name, row[originalIndex] ?? 0];
+  })
 );
 const n = (value) => Number(value ?? 0).toLocaleString("en-US");
 const watchMinutes = Number(values.estimatedMinutesWatched ?? 0);
