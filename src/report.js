@@ -1,4 +1,13 @@
 import { google } from "googleapis";
+import {
+  formatWatchTime,
+  getGoogleErrorDetails,
+  getNetSubscribers,
+  getUtcDateRange,
+  isQuotaExhausted,
+  isRetryableRateLimit,
+  selectLatestDailyRow,
+} from "./report-utils.js";
 
 const required = [
   "YOUTUBE_CLIENT_ID",
@@ -41,39 +50,9 @@ try {
   console.warn(`Could not fetch public channel branding; continuing without it: ${error.message}`);
 }
 
-// Analytics data can arrive late. Query the previous seven complete UTC dates
-// by day, then report the most recent day for which the API returned a row.
-const endDate = new Date(Date.now() - 24 * 60 * 60 * 1000)
-  .toISOString().slice(0, 10);
-const rangeStart = new Date(`${endDate}T00:00:00Z`);
-rangeStart.setUTCDate(rangeStart.getUTCDate() - 6);
-const startDate = rangeStart.toISOString().slice(0, 10);
-
+// Analytics data can arrive late. Query the previous seven complete UTC dates.
+const { startDate, endDate } = getUtcDateRange();
 const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
-
-const getGoogleErrorDetails = (error) => {
-  const apiError = error?.response?.data?.error;
-  const reasons = [
-    ...(apiError?.errors ?? []).map((item) => item.reason),
-    ...(apiError?.details ?? []).map((item) => item.reason),
-  ].filter(Boolean);
-  return {
-    status: error?.response?.status ?? error?.code,
-    reasons,
-    message: apiError?.message || error?.message || "Unknown Google API error",
-  };
-};
-
-const isRetryableRateLimit = (details) =>
-  details.status === 429 ||
-  details.reasons.some((reason) =>
-    ["rateLimitExceeded", "userRateLimitExceeded", "backendError"].includes(reason)
-  );
-
-const isQuotaExhausted = (details) =>
-  details.reasons.some((reason) =>
-    ["quotaExceeded", "dailyLimitExceeded"].includes(reason)
-  );
 
 let response;
 try {
@@ -135,7 +114,7 @@ try {
 const headers = response.data.columnHeaders ?? [];
 const dayIndex = headers.findIndex((header) => header.name === "day");
 const rows = response.data.rows ?? [];
-const row = dayIndex < 0 ? null : [...rows].sort((a, b) => String(b[dayIndex]).localeCompare(String(a[dayIndex])))[0];
+const row = selectLatestDailyRow(headers, rows);
 
 if (!row) {
   console.error(`YouTube Analytics returned no daily rows for channel ${channelId} between ${startDate} and ${endDate}.`);
@@ -152,9 +131,8 @@ const values = Object.fromEntries(
   })
 );
 const n = (value) => Number(value ?? 0).toLocaleString("en-US");
-const watchMinutes = Number(values.estimatedMinutesWatched ?? 0);
-const watchTime = `${Math.floor(watchMinutes / 60)}h ${Math.round(watchMinutes % 60)}m`;
-const netSubs = Number(values.subscribersGained ?? 0) - Number(values.subscribersLost ?? 0);
+const watchTime = formatWatchTime(values.estimatedMinutesWatched);
+const netSubs = getNetSubscribers(values.subscribersGained, values.subscribersLost);
 
 const message = {
   text: `📊 *${channelName} — YouTube daily report · ${reportDate}*`,
