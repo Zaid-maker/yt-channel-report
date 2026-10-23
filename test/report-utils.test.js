@@ -54,7 +54,7 @@ test("returns the previous seven complete UTC dates", () => {
     startDate: "2026-10-17", endDate: "2026-10-23",
   });
   assert.deepEqual(getUtcDateRange(new Date("2026-01-01T00:10:00Z")), {
-    startDate: "2025-12-24", endDate: "2025-12-31",
+    startDate: "2025-12-25", endDate: "2025-12-31",
   });
 });
 
