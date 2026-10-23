@@ -30,10 +30,15 @@ const response = await youtubeAnalytics.reports.query({
   startDate: reportDate,
   endDate: reportDate,
   metrics: "views,estimatedMinutesWatched,subscribersGained,subscribersLost,likes,comments,shares",
-  dimensions: "day"
 });
 
-const row = response.data.rows?.[0] ?? [];
+const row = response.data.rows?.[0];
+if (!row) {
+  console.error(`YouTube Analytics returned no rows for channel ${channelId} on ${reportDate}. Check that YOUTUBE_CHANNEL_ID matches the channel authorized by YOUTUBE_REFRESH_TOKEN and that analytics data is available for that date.`);
+  console.error(`Returned column headers: ${(response.data.columnHeaders ?? []).map((header) => header.name).join(", ") || "(none)"}`);
+  throw new Error("No YouTube Analytics data row returned; refusing to send a misleading all-zero report.");
+}
+console.log(`YouTube Analytics returned ${response.data.rows.length} row(s) for ${reportDate}.`);
 const values = Object.fromEntries(
   (response.data.columnHeaders ?? []).map((header, i) => [header.name, row[i] ?? 0])
 );
