@@ -19,11 +19,27 @@ oauth2.setCredentials({ refresh_token: process.env.YOUTUBE_REFRESH_TOKEN });
 
 const youtubeAnalytics = google.youtubeAnalytics({ version: "v2", auth: oauth2 });
 const channelId = process.env.YOUTUBE_CHANNEL_ID;
-const youtubeData = google.youtube({ version: "v3", auth: oauth2 });
-const channelResponse = await youtubeData.channels.list({ part: ["snippet"], id: [channelId] });
-const channelSnippet = channelResponse.data.items?.[0]?.snippet;
-const channelName = channelSnippet?.title || "YouTube channel";
-const channelLogoUrl = channelSnippet?.thumbnails?.high?.url || channelSnippet?.thumbnails?.medium?.url || channelSnippet?.thumbnails?.default?.url;
+// Fetch public channel branding from the channel page. This avoids requiring
+// an additional OAuth scope just to display the name and avatar in Slack.
+let channelName = "YouTube channel";
+let channelLogoUrl;
+try {
+  const pageResponse = await fetch(`https://www.youtube.com/channel/${encodeURIComponent(channelId)}`, {
+    headers: { "User-Agent": "Mozilla/5.0 (compatible; YouTubeSlackReport/1.0)" }
+  });
+  if (pageResponse.ok) {
+    const html = await pageResponse.text();
+    const metaContent = (property) => {
+      const escaped = property.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+      const match = html.match(new RegExp(`<meta[^>]+(?:property|name)=["']${escaped}["'][^>]+content=["']([^"']+)["']|<meta[^>]+content=["']([^"']+)["'][^>]+(?:property|name)=["']${escaped}["']`, "i"));
+      return (match?.[1] || match?.[2] || "").replace(/&amp;/g, "&").replace(/&#39;/g, "'").replace(/&quot;/g, '"');
+    };
+    channelName = metaContent("og:title") || channelName;
+    channelLogoUrl = metaContent("og:image") || undefined;
+  }
+} catch (error) {
+  console.warn(`Could not fetch public channel branding; continuing without it: ${error.message}`);
+}
 
 // Analytics data can arrive late. Query the previous seven complete UTC dates
 // by day, then report the most recent day for which the API returned a row.
