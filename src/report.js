@@ -34,9 +34,32 @@ const response = await youtubeAnalytics.reports.query({
 
 const row = response.data.rows?.[0];
 if (!row) {
-  console.error(`YouTube Analytics returned no rows for channel ${channelId} on ${reportDate}. Check that YOUTUBE_CHANNEL_ID matches the channel authorized by YOUTUBE_REFRESH_TOKEN and that analytics data is available for that date.`);
+  console.error(`YouTube Analytics returned no rows for channel ${channelId} on ${reportDate}.`);
   console.error(`Returned column headers: ${(response.data.columnHeaders ?? []).map((header) => header.name).join(", ") || "(none)"}`);
-  throw new Error("No YouTube Analytics data row returned; refusing to send a misleading all-zero report.");
+
+  // Diagnostic only: check whether this channel has any reportable data in the
+  // preceding seven days, without changing the daily report or sending zeros.
+  const rangeEnd = new Date(`${reportDate}T00:00:00Z`);
+  const rangeStart = new Date(rangeEnd);
+  rangeStart.setUTCDate(rangeStart.getUTCDate() - 6);
+  const rangeStartDate = rangeStart.toISOString().slice(0, 10);
+  const rangeResponse = await youtubeAnalytics.reports.query({
+    ids: `channel==${channelId}`,
+    startDate: rangeStartDate,
+    endDate: reportDate,
+    metrics: "views,estimatedMinutesWatched,subscribersGained,subscribersLost,likes,comments,shares",
+  });
+  const rangeRow = rangeResponse.data.rows?.[0];
+  if (rangeRow) {
+    const rangeValues = Object.fromEntries(
+      (rangeResponse.data.columnHeaders ?? []).map((header, i) => [header.name, rangeRow[i] ?? 0])
+    );
+    console.error(`Seven-day diagnostic (${rangeStartDate} to ${reportDate}) returned data: views=${rangeValues.views}, watchMinutes=${rangeValues.estimatedMinutesWatched}, subscribersGained=${rangeValues.subscribersGained}, subscribersLost=${rangeValues.subscribersLost}.`);
+  } else {
+    console.error(`Seven-day diagnostic (${rangeStartDate} to ${reportDate}) also returned no rows. This points to a channel-ID/token mismatch or no reportable data for the range.`);
+    console.error(`Diagnostic column headers: ${(rangeResponse.data.columnHeaders ?? []).map((header) => header.name).join(", ") || "(none)"}`);
+  }
+  throw new Error("No daily YouTube Analytics row returned; refusing to send a misleading all-zero report.");
 }
 console.log(`YouTube Analytics returned ${response.data.rows.length} row(s) for ${reportDate}.`);
 const values = Object.fromEntries(
