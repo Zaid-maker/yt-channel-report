@@ -49,13 +49,88 @@ const rangeStart = new Date(`${endDate}T00:00:00Z`);
 rangeStart.setUTCDate(rangeStart.getUTCDate() - 6);
 const startDate = rangeStart.toISOString().slice(0, 10);
 
-const response = await youtubeAnalytics.reports.query({
-  ids: `channel==${channelId}`,
-  startDate,
-  endDate,
-  dimensions: "day",
-  metrics: "views,estimatedMinutesWatched,subscribersGained,subscribersLost,likes,comments,shares",
-});
+const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
+
+const getGoogleErrorDetails = (error) => {
+  const apiError = error?.response?.data?.error;
+  const reasons = [
+    ...(apiError?.errors ?? []).map((item) => item.reason),
+    ...(apiError?.details ?? []).map((item) => item.reason),
+  ].filter(Boolean);
+  return {
+    status: error?.response?.status ?? error?.code,
+    reasons,
+    message: apiError?.message || error?.message || "Unknown Google API error",
+  };
+};
+
+const isRetryableRateLimit = (details) =>
+  details.status === 429 ||
+  details.reasons.some((reason) =>
+    ["rateLimitExceeded", "userRateLimitExceeded", "backendError"].includes(reason)
+  );
+
+const isQuotaExhausted = (details) =>
+  details.reasons.some((reason) =>
+    ["quotaExceeded", "dailyLimitExceeded"].includes(reason)
+  );
+
+let response;
+try {
+  // Retry short-lived throttling/backend errors with exponential backoff.
+  // Do not spin on a hard daily quota cap: notify Slack and end gracefully.
+  for (let attempt = 0; ; attempt += 1) {
+    try {
+      response = await youtubeAnalytics.reports.query({
+        ids: `channel==${channelId}`,
+        startDate,
+        endDate,
+        dimensions: "day",
+        metrics: "views,estimatedMinutesWatched,subscribersGained,subscribersLost,likes,comments,shares",
+      });
+      break;
+    } catch (error) {
+      const details = getGoogleErrorDetails(error);
+      if (isQuotaExhausted(details)) {
+        const warning = {
+          text: `⚠️ YouTube report skipped for *${channelName}*: the YouTube API quota is exhausted. No analytics were changed or reported as zero. The next scheduled run will try again.`,
+        };
+        try {
+          const slackResponse = await fetch(process.env.SLACK_WEBHOOK_URL, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify(warning),
+          });
+          if (!slackResponse.ok) {
+            console.error(`Could not send quota warning to Slack (${slackResponse.status}).`);
+          }
+        } catch (slackError) {
+          console.error(`Could not send quota warning to Slack: ${slackError.message}`);
+        }
+        console.warn(`YouTube API quota exhausted (${details.reasons.join(", ") || details.status}). Skipping this run without sending a misleading report.`);
+        process.exit(0);
+      }
+
+      if (!isRetryableRateLimit(details) || attempt >= 3) {
+        console.error(`YouTube Analytics request failed: ${details.message}`);
+        throw error;
+      }
+
+      const retryAfter = Number(error?.response?.headers?.["retry-after"]);
+      const delayMs = Number.isFinite(retryAfter) && retryAfter > 0
+        ? Math.min(retryAfter * 1000, 60_000)
+        : Math.min(1000 * (2 ** attempt), 8000);
+      console.warn(`YouTube API rate-limited the request. Retry ${attempt + 1}/3 in ${Math.ceil(delayMs / 1000)}s.`);
+      await sleep(delayMs);
+    }
+  }
+} catch (error) {
+  const details = getGoogleErrorDetails(error);
+  if (isRetryableRateLimit(details)) {
+    console.error("YouTube API rate limit persisted after retries; this run will fail so GitHub Actions clearly records the missed report.");
+  }
+  throw error;
+}
 
 const headers = response.data.columnHeaders ?? [];
 const dayIndex = headers.findIndex((header) => header.name === "day");
