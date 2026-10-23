@@ -19,8 +19,11 @@ oauth2.setCredentials({ refresh_token: process.env.YOUTUBE_REFRESH_TOKEN });
 
 const youtubeAnalytics = google.youtubeAnalytics({ version: "v2", auth: oauth2 });
 const channelId = process.env.YOUTUBE_CHANNEL_ID;
-const channelName = process.env.YOUTUBE_CHANNEL_NAME || "YouTube channel";
-const channelLogoUrl = process.env.YOUTUBE_CHANNEL_LOGO_URL;
+const youtubeData = google.youtube({ version: "v3", auth: oauth2 });
+const channelResponse = await youtubeData.channels.list({ part: ["snippet"], id: [channelId] });
+const channelSnippet = channelResponse.data.items?.[0]?.snippet;
+const channelName = channelSnippet?.title || "YouTube channel";
+const channelLogoUrl = channelSnippet?.thumbnails?.high?.url || channelSnippet?.thumbnails?.medium?.url || channelSnippet?.thumbnails?.default?.url;
 
 // Analytics data can arrive late. Query the previous seven complete UTC dates
 // by day, then report the most recent day for which the API returned a row.
@@ -65,8 +68,8 @@ const netSubs = Number(values.subscribersGained ?? 0) - Number(values.subscriber
 const message = {
   text: `📊 *${channelName} — YouTube daily report · ${reportDate}*`,
   blocks: [
-    ...(channelLogoUrl ? [{ type: "image", image_url: channelLogoUrl, alt_text: `${channelName} channel logo`, title: { type: "plain_text", text: channelName, emoji: true } }] : []),
-    { type: "header", text: { type: "plain_text", text: `📊 ${channelName} · Daily report · ${reportDate}`, emoji: true } },
+    { type: "section", text: { type: "mrkdwn", text: `*${channelName}*` }, ...(channelLogoUrl ? { accessory: { type: "image", image_url: channelLogoUrl, alt_text: `${channelName} channel logo` } } : {}) },
+    { type: "header", text: { type: "plain_text", text: `📊 Daily report · ${reportDate}`, emoji: true } },
     { type: "section", fields: [
       { type: "mrkdwn", text: `*Views*\n${n(values.views)}` },
       { type: "mrkdwn", text: `*Watch time*\n${watchTime}` },
