@@ -9,10 +9,10 @@ A free GitHub Actions bot that posts a daily YouTube Analytics summary to a Slac
 3. Add a webhook to the channel where reports should appear.
 4. Copy the webhook URL. Treat it like a password; don't commit it to the repo.
 
-## 2. Enable YouTube Analytics API
+## 2. Enable YouTube APIs
 
 1. Open https://console.cloud.google.com/ and create/select a Google Cloud project.
-2. Enable **YouTube Analytics API**.
+2. Enable **YouTube Analytics API** and **YouTube Data API v3**. The Analytics API provides report metrics; the Data API supplies the channel name and logo shown in Slack.
 3. Configure the OAuth consent screen and create an OAuth client ID (Desktop app is a common option for a one-time local OAuth flow).
 4. Authorize the Google account that owns/manages the YouTube channel with the read-only analytics scope:
    `https://www.googleapis.com/auth/yt-analytics.readonly`
