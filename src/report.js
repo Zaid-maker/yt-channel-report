@@ -19,6 +19,8 @@ oauth2.setCredentials({ refresh_token: process.env.YOUTUBE_REFRESH_TOKEN });
 
 const youtubeAnalytics = google.youtubeAnalytics({ version: "v2", auth: oauth2 });
 const channelId = process.env.YOUTUBE_CHANNEL_ID;
+const channelName = process.env.YOUTUBE_CHANNEL_NAME || "YouTube channel";
+const channelLogoUrl = process.env.YOUTUBE_CHANNEL_LOGO_URL;
 
 // Analytics data can arrive late. Query the previous seven complete UTC dates
 // by day, then report the most recent day for which the API returned a row.
@@ -61,9 +63,10 @@ const watchTime = `${Math.floor(watchMinutes / 60)}h ${Math.round(watchMinutes %
 const netSubs = Number(values.subscribersGained ?? 0) - Number(values.subscribersLost ?? 0);
 
 const message = {
-  text: `📊 *YouTube daily report — ${reportDate}*`,
+  text: `📊 *${channelName} — YouTube daily report · ${reportDate}*`,
   blocks: [
-    { type: "header", text: { type: "plain_text", text: `📊 YouTube daily report · ${reportDate}`, emoji: true } },
+    ...(channelLogoUrl ? [{ type: "image", image_url: channelLogoUrl, alt_text: `${channelName} channel logo`, title: { type: "plain_text", text: channelName, emoji: true } }] : []),
+    { type: "header", text: { type: "plain_text", text: `📊 ${channelName} · Daily report · ${reportDate}`, emoji: true } },
     { type: "section", fields: [
       { type: "mrkdwn", text: `*Views*\n${n(values.views)}` },
       { type: "mrkdwn", text: `*Watch time*\n${watchTime}` },
