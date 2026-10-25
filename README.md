@@ -1,6 +1,6 @@
 # YouTube → Slack daily report
 
-A free GitHub Actions bot that posts a daily YouTube Analytics summary to a Slack channel. It reports public channel metadata, views, watch time, subscriber changes, engagement rate, day-over-day growth, and the top five videos by views with titles and per-video engagement. The workflow checks the previous seven complete UTC dates and reports the **latest daily row returned by YouTube Analytics**. Analytics data can be delayed or revised, so the report date may be earlier than yesterday.
+A free GitHub Actions bot that posts a daily YouTube Analytics summary to a Slack channel. It reports public channel metadata, views, watch time, subscriber changes, engagement rate, and day-over-day growth. The workflow checks the previous seven complete UTC dates and reports the **latest daily row returned by YouTube Analytics**. Analytics data can be delayed or revised, so the report date may be earlier than yesterday.
 
 The workflow runs in GitHub Actions; the OAuth refresh-token generator runs **locally on your own computer**. Never put credentials or tokens in source code.
 

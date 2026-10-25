@@ -165,44 +165,6 @@ const growthText = (current, previous) => {
   return `${change > 0 ? "+" : ""}${pct(change)}`;
 };
 
-let topVideos = [];
-try {
-  const videoResponse = await queryAnalytics({
-    dimensions: "video",
-    metrics: "views,estimatedMinutesWatched,likes,comments,shares",
-    sort: "-views",
-    maxResults: 5
-  });
-  const videoHeaders = videoResponse.data.columnHeaders ?? [];
-  const videoRows = videoResponse.data.rows ?? [];
-  const videoIndex = videoHeaders.findIndex((header) => header.name === "video");
-  topVideos = await Promise.all(videoRows.slice(0, 5).map(async (videoRow) => {
-    const videoValues = valueMap(videoHeaders, videoRow);
-    const videoId = String(videoRow[videoIndex] ?? "");
-    let title = `Video ${videoId}`;
-    if (videoId) {
-      try {
-        const metadataResponse = await fetch(`https://www.youtube.com/oembed?url=${encodeURIComponent(`https://www.youtube.com/watch?v=${videoId}`)}&format=json`, {
-          signal: AbortSignal.timeout(8000)
-        });
-        if (metadataResponse.ok) title = (await metadataResponse.json()).title || title;
-      } catch (error) {
-        console.warn(`Could not fetch title for video ${videoId}: ${error.message}`);
-      }
-    }
-    const videoEngagement = Number(videoValues.likes) + Number(videoValues.comments) + Number(videoValues.shares);
-    const rate = Number(videoValues.views) > 0 ? videoEngagement / Number(videoValues.views) * 100 : null;
-    return { videoId, title, ...videoValues, rate };
-  }));
-} catch (error) {
-  const details = getGoogleErrorDetails(error);
-  if (isQuotaExhausted(details)) {
-    console.warn("Quota exhausted while fetching top videos; sending the available daily report without video rankings.");
-  } else {
-    console.warn(`Could not fetch top video performance; sending the daily report without rankings: ${details.message}`);
-  }
-}
-
 const channelDetails = [
   channelHandle ? `Handle: ${channelHandle}` : null,
   `Channel ID: ${channelId}`,
@@ -230,12 +192,6 @@ const blocks = [
   { type: "context", elements: [{ type: "mrkdwn", text: `Engagement rate = (likes + comments + shares) / views. Data window checked: ${startDate} to ${endDate} UTC. Daily data can be delayed or revised.` }] }
 ];
 
-if (topVideos.length) {
-  blocks.push({ type: "header", text: { type: "plain_text", text: "🏆 Top videos by views", emoji: true } });
-  blocks.push({ type: "section", text: { type: "mrkdwn", text: topVideos.map((video, index) =>
-    `*${index + 1}. <https://www.youtube.com/watch?v=${video.videoId}|${video.title.replace(/[&<>]/g, "")}>*\n${n(video.views)} views · ${formatWatchTime(video.estimatedMinutesWatched)} watch time · engagement ${video.rate === null ? "n/a" : pct(video.rate)}`
-  ).join("\n\n") } });
-}
 blocks.push({ type: "context", elements: [{ type: "mrkdwn", text: "Source: YouTube Analytics API · Public channel/video metadata is best-effort. Only authorized channel analytics are available." }] });
 
 const message = {
@@ -251,4 +207,4 @@ const slackResponse = await fetch(process.env.SLACK_WEBHOOK_URL, {
 if (!slackResponse.ok) {
   throw new Error(`Slack webhook failed (${slackResponse.status}): ${await slackResponse.text()}`);
 }
-console.log(`Sent YouTube report for ${reportDate} to Slack with channel metadata, engagement, growth, and ${topVideos.length} top video(s).`);
+console.log(`Sent YouTube report for ${reportDate} to Slack with channel metadata, engagement, and growth.`);
